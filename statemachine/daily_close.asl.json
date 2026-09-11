@@ -1,0 +1,30 @@
+{
+  "Comment": "Daily close pipeline for the multi-custodian reconciliation service. Defined as a real Amazon States Language document; whether it was executed against a live (moto-mocked) Step Functions state machine in this build, versus run as the equivalent Python call sequence, is disclosed exactly in the README's honest framing section.",
+  "StartAt": "IngestCustodianFeed",
+  "States": {
+    "IngestCustodianFeed": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:000000000000:function:reconciliation-ingest-custodian",
+      "Comment": "Loads the day's custodian position, cash and transaction files.",
+      "Next": "IngestBookOfRecord"
+    },
+    "IngestBookOfRecord": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:000000000000:function:reconciliation-ingest-book",
+      "Comment": "Loads the internal book of record for the same accounts and date.",
+      "Next": "MatchAndClassify"
+    },
+    "MatchAndClassify": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:000000000000:function:reconciliation-daily-close",
+      "Comment": "Runs the fast hash-indexed matcher (app/matcher.py) and classifies every difference by named rule.",
+      "Next": "WriteExceptionsToDynamoDB"
+    },
+    "WriteExceptionsToDynamoDB": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::dynamodb:batchWriteItem",
+      "Comment": "Persists every record's reconciliation status (matched or held, and the rule if held) to the ReconciliationDailyStatus table.",
+      "End": true
+    }
+  }
+}

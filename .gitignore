@@ -1,0 +1,16 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+
+# regenerable synthetic data: no fixed files are written to disk by this
+# project (every script generates its data in memory from a fixed seed), so
+# there is nothing else to ignore here

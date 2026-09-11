@@ -1,0 +1,21 @@
+=== Multi-Custodian Reconciliation -- daily close ===
+accounts: 500
+records: 250000
+
+-- claim: 40 of 40 seeded breaks caught --
+seeded breaks caught: 40 / 40
+
+-- claim: 0 false holds over 250,000 records --
+false holds: 0
+
+-- claim: differences classified by named rule --
+  timing: 8
+  quantity: 8
+  price: 8
+  missing: 8
+  duplicate: 8
+
+-- claim: exact agreement with an independent oracle --
+fast matcher breaks: 40
+oracle breaks: 40
+mismatches: 0

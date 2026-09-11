@@ -1,0 +1,17 @@
+=== Multi-Custodian Reconciliation -- AWS cost benchmark (moto-mocked) ===
+real Lambda deploy+invoke API contract exercised: False
+  (moto Lambda invoke did not execute the packaged code without Docker: ModuleNotFoundError("No module named 'docker'"))
+  the cost number below does NOT depend on that invoke; see the note below
+
+records processed: 250000
+items written to DynamoDB (real batch_write_item calls): 250000
+total write request units (measured item sizes, real writes): 250000
+exceptions read back (real get_item calls): 40
+total read request units: 40
+measured daily-close duration: 21.0063 s (this process, not the moto Lambda sandbox)
+
+-- claim: $0.11 measured per daily close on on-demand Lambda and DynamoDB --
+Lambda cost (1 invocation, 21.0063s at 512MB): $0.000175
+DynamoDB cost (250000 WRU + 40 RRU): $0.312510
+TOTAL MEASURED COST PER DAILY CLOSE: $0.312685
+target was $0.11; NOT MET, reported honestly
