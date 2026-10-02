@@ -339,3 +339,126 @@ produced the dollar-cost number this project's Findings section reports.
   above is a single-run wall-clock number on a shared development machine,
   dominated by 10,000 `batch_write_item` calls against moto's in-memory
   DynamoDB, not a controlled throughput benchmark.
+
+## Extension (Sep. 2026): Cross-Domain Account Value Reconciliation with Cause-Classified Breaks
+
+The original project above reconciles an external custodian feed
+against an internal book of record, an operations problem: two
+representations of the same accounts, one of which is outside the firm.
+`cross_domain/` is a different problem this portfolio had no answer for:
+one account value computed by two independently modeled domains
+*inside* the same firm (a custody position-valuation engine and an
+advisory performance NAV engine), where every disagreement is
+attributed to a named cause, not just a dollar amount. Every number
+below was measured on this machine, not targeted.
+
+**Honest framing.** `cross_domain/app/generator.py` generates every
+account-day from a fixed seed; nothing here is a real account or a real
+custody or advisory system. The two domains are two genuinely different
+formulas over a shared set of underlying "parts" (position-value
+components): the custody engine sums every part plus anything it
+additionally considers in scope (accrued-unsettled trades, restricted
+assets) and rounds once; the advisory engine excludes both by
+definition and, for 12 seeded cells, lags one day recognizing an
+external cash flow or rounds each part individually before summing.
+Classification runs as one SQL query (`app/reconciler.py`) over DuckDB,
+reading only what a reconciliation desk would actually have access to
+(each domain's value, a trade blotter feed, a side-pocket register, a
+cash-activity feed, and the position-value parts), never which cells
+were deliberately seeded.
+
+**Architecture.**
+
+```
+cross_domain/
+  app/
+    generator.py    60,000 account-days (500 accounts x 120 days); 48 cells
+                    (12 per cause) perturbed, everything else agrees to
+                    the cent by construction
+    reconciler.py   loads into DuckDB via a pandas DataFrame, then one SQL
+                    query: diff, a cause-classification waterfall
+                    (definition -> scope -> timing -> rounding ->
+                    unexplained), and a residual per flagged cell
+  scripts/
+    run_cross_domain_benchmark.py   the 48-of-48 / 1,200-clean-sample / residual benchmark
+  tests/            12 pytest tests
+```
+
+**Validation.**
+
+```
+$ python scripts/run_cross_domain_benchmark.py
+-- claim: 60,000 account-days --
+account-days generated: 60000 (500 accounts x 120 days)
+
+-- claim: every disagreement attributed to a named cause (definition, timing, scope, rounding) --
+causes used: ['definition', 'rounding', 'scope', 'timing']
+
+-- claim: 48 of 48 seeded breaks landed in the correct class --
+correct: 48 / 48
+unexpected flags (not seeded): 0
+
+-- claim: 0 of 1,200 agreeing account-days falsely flagged --
+false flags in a 1,200-cell clean sample: 0 / 1200
+
+-- claim: no unexplained residual above one cent --
+max |residual| across all 48 flagged account-days: 0.000000
+cells classified 'unexplained': 0
+```
+
+Full output: `docs/cross_domain_benchmark_output.txt`. 12 pytest tests:
+`docs/cross_domain_test_output.txt`.
+
+**Findings.**
+
+*A loader that bound 60,000 rows one statement at a time never
+finished.* The first version of `reconciler.load` used DuckDB's
+`executemany`, one bound `INSERT` per account-day, exactly the pattern
+this project's own `backend/` already uses successfully against
+moto's DynamoDB. Against DuckDB's `LIST(DOUBLE)` column it measured
+over 10 minutes for 60,000 rows and was stopped before finishing.
+Collapsing all 60,000 rows into a single parameterized multi-row
+`INSERT` (one statement, 480,000 bound values) was still too slow to
+finish in a reasonable time. Building a pandas DataFrame from the same
+rows and running one `INSERT INTO cells SELECT * FROM df` measured
+under 0.05 seconds for the identical 60,000 rows, a difference of
+several orders of magnitude for the same data, which is why `pandas` is
+a dependency of this extension and not of the original `backend/`.
+
+*A rounding defect built from random sub-cent noise did not reliably
+exceed the materiality threshold.* The first version of the "rounding"
+cause generated each of 5 position-value parts with ordinary random
+4-decimal precision and relied on their individually-rounded sum
+differing from their once-rounded sum by more than a cent. It
+frequently did not: rounding errors on random values are not
+systematically biased, so across only 5 parts they often partially
+cancel, and all 12 seeded rounding cells measured a diff of exactly
+$0.00, caught by neither domain. The fix makes every part sit a fixed
+0.6 cents above a clean 2-decimal value, so each part rounds up by
+a full cent individually (5 cents total) while the summed total rounds
+up by only 3 cents, a deterministic 2-cent gap that does not depend on
+how the random draws happen to land.
+
+**Measured results.**
+
+| Metric | Measured | Claim |
+|---|---|---|
+| Account-days | 60,000 (500 accounts x 120 days) | 60,000 account-days |
+| **Causes used** | definition, timing, scope, rounding | every disagreement attributed to a named cause |
+| **Seeded breaks landed in the correct class** | **48 / 48** | 48 of 48 seeded breaks landed in the correct class |
+| False flags, 1,200-cell clean sample | 0 / 1,200 | 0 of 1,200 agreeing account-days falsely flagged |
+| **Max residual over all flagged cells** | **$0.00** | no unexplained residual above one cent |
+
+**Limitations.**
+
+- **The 48 seeded breaks are a fixed, disjoint set of cells**, not a
+  continuous stream; this measures classification accuracy on breaks
+  that exist, not a detector's recall against an unknown population.
+- **Each cause's perturbation is a single, localized delta** rather
+  than a stateful, propagating bug; a timing lag that compounds across
+  multiple days, for example, is not modeled.
+- **The classifier's waterfall order (definition, then scope, then
+  timing, then rounding) matters when more than one explanatory field
+  is simultaneously nonzero**; the 48 seeded cells are constructed so
+  only one ever is per cell, which the generator's disjoint-cell
+  sampling guarantees but a live feed would not.

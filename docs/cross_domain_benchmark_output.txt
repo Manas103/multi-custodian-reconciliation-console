@@ -1,0 +1,17 @@
+=== Cross-Domain Account Value Reconciliation -- benchmark ===
+-- claim: 60,000 account-days --
+account-days generated: 60000 (500 accounts x 120 days)
+
+-- claim: every disagreement attributed to a named cause (definition, timing, scope, rounding) --
+causes used: ['definition', 'rounding', 'scope', 'timing']
+
+-- claim: 48 of 48 seeded breaks landed in the correct class --
+correct: 48 / 48
+unexpected flags (not seeded): 0
+
+-- claim: 0 of 1,200 agreeing account-days falsely flagged --
+false flags in a 1,200-cell clean sample: 0 / 1200
+
+-- claim: no unexplained residual above one cent --
+max |residual| across all 48 flagged account-days: 0.000000
+cells classified 'unexplained': 0
